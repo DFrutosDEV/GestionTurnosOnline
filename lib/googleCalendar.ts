@@ -1,11 +1,87 @@
 import { google } from 'googleapis';
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
+const TIMEZONE = 'America/Argentina/Buenos_Aires';
 
 interface CalendarConfig {
   clientEmail: string;
   privateKey: string;
   calendarId: string;
+}
+
+/**
+ * Convierte una fecha y hora (strings) a un objeto Date interpretándolos
+ * como si fueran en la zona horaria de Argentina (UTC-3)
+ */
+export function createDateInArgentinaTimezone(fecha: string, hora: string): Date {
+  // Crear el string de fecha/hora en formato ISO sin zona horaria
+  const dateTimeString = `${fecha}T${hora}`;
+  
+  // Crear un Date interpretando la fecha/hora como si fuera en hora local del servidor
+  const localDate = new Date(dateTimeString);
+  
+  // Argentina está en UTC-3, que significa 180 minutos al oeste de UTC
+  // getTimezoneOffset() devuelve minutos positivos para zonas al oeste de UTC
+  const argentinaOffsetMinutes = 3 * 60; // 180 minutos (UTC-3)
+  
+  // Obtener el offset local del servidor en minutos
+  const localOffsetMinutes = localDate.getTimezoneOffset();
+  
+  // Calcular la diferencia: si el servidor está en UTC (offset=0) y queremos Argentina (offset=180),
+  // necesitamos sumar 180 minutos al Date para que represente la hora correcta en UTC
+  // que corresponde a la hora local de Argentina
+  const offsetDiffMinutes = argentinaOffsetMinutes - localOffsetMinutes;
+  const adjustedDate = new Date(localDate.getTime() + offsetDiffMinutes * 60 * 1000);
+  
+  return adjustedDate;
+}
+
+/**
+ * Formatea un Date a formato ISO string para Google Calendar
+ * El Date debe representar la hora correcta en UTC (ajustada para Argentina)
+ * Convertimos de vuelta a hora local de Argentina para el formato
+ */
+function formatDateTimeForGoogleCalendar(date: Date): string {
+  // El Date ya está ajustado: internamente representa la hora UTC
+  // que corresponde a la hora local de Argentina que queremos.
+  // Para formatear, necesitamos restar 3 horas de los valores UTC
+  // para obtener la hora local de Argentina.
+  const utcYear = date.getUTCFullYear();
+  const utcMonth = date.getUTCMonth();
+  const utcDay = date.getUTCDate();
+  const utcHours = date.getUTCHours();
+  const utcMinutes = date.getUTCMinutes();
+  const utcSeconds = date.getUTCSeconds();
+  
+  // Restar 3 horas para obtener hora local de Argentina
+  let argentinaHours = utcHours - 3;
+  let argentinaDay = utcDay;
+  let argentinaMonth = utcMonth;
+  let argentinaYear = utcYear;
+  
+  // Manejar casos donde restar horas cambia el día
+  if (argentinaHours < 0) {
+    argentinaHours += 24;
+    argentinaDay--;
+    if (argentinaDay < 1) {
+      argentinaMonth--;
+      if (argentinaMonth < 0) {
+        argentinaMonth = 11;
+        argentinaYear--;
+      }
+      // Obtener el último día del mes anterior
+      argentinaDay = new Date(argentinaYear, argentinaMonth + 1, 0).getDate();
+    }
+  }
+  
+  const year = String(argentinaYear);
+  const month = String(argentinaMonth + 1).padStart(2, '0');
+  const day = String(argentinaDay).padStart(2, '0');
+  const hours = String(argentinaHours).padStart(2, '0');
+  const minutes = String(utcMinutes).padStart(2, '0');
+  const seconds = String(utcSeconds).padStart(2, '0');
+  
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
 }
 
 /**
@@ -71,15 +147,20 @@ export async function createCalendarEvent(
   try {
     const calendar = getCalendarClient(config);
 
+    // Formatear las fechas correctamente para Google Calendar
+    // Usamos formatDateTimeForGoogleCalendar para evitar problemas de zona horaria
+    const startISO = formatDateTimeForGoogleCalendar(startDateTime);
+    const endISO = formatDateTimeForGoogleCalendar(endDateTime);
+
     const event: any = {
       summary: title,
       start: {
-        dateTime: startDateTime.toISOString(),
-        timeZone: 'America/Argentina/Buenos_Aires',
+        dateTime: startISO,
+        timeZone: TIMEZONE,
       },
       end: {
-        dateTime: endDateTime.toISOString(),
-        timeZone: 'America/Argentina/Buenos_Aires',
+        dateTime: endISO,
+        timeZone: TIMEZONE,
       },
       reminders: {
         useDefault: false,

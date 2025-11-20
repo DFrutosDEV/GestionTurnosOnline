@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { decrypt } from '@/lib/encryption';
-import { checkAvailability, createCalendarEvent } from '@/lib/googleCalendar';
+import { checkAvailability, createCalendarEvent, createDateInArgentinaTimezone } from '@/lib/googleCalendar';
 import { getConfig } from '@/lib/config';
 import { addMinutes } from 'date-fns';
 import { sendEmail, generateConfirmacionEmailHTML } from '@/lib/email';
@@ -70,8 +70,8 @@ export async function POST(request: NextRequest) {
       calendarId: process.env.GOOGLE_CALENDAR_ID,
     };
 
-    // Verificar disponibilidad
-    const startDateTime = new Date(`${turnoData.fecha}T${turnoData.hora}`);
+    // Crear fechas interpretándolas como hora de Argentina
+    const startDateTime = createDateInArgentinaTimezone(turnoData.fecha, turnoData.hora);
     const endDateTime = addMinutes(startDateTime, 30); // Turno de 30 minutos
 
     const disponible = await checkAvailability(

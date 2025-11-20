@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAvailability, createCalendarEvent } from '@/lib/googleCalendar';
+import { checkAvailability, createCalendarEvent, createDateInArgentinaTimezone } from '@/lib/googleCalendar';
 import { getConfig } from '@/lib/config';
 import { addMinutes } from 'date-fns';
 
@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar disponibilidad en Google Calendar
-    const startDateTime = new Date(`${fecha}T${hora}`);
+    // Crear fechas interpretándolas como hora de Argentina
+    const startDateTime = createDateInArgentinaTimezone(fecha, hora);
     const endDateTime = addMinutes(startDateTime, 30); // Turno de 30 minutos
 
     // Validar que las variables de entorno estén configuradas
