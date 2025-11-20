@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAvailability, createCalendarEvent, createDateInArgentinaTimezone } from '@/lib/googleCalendar';
+import { checkAvailability, createCalendarEvent, createDateInArgentinaTimezone, getDayOfWeekInArgentina } from '@/lib/googleCalendar';
 import { getConfig } from '@/lib/config';
 import { addMinutes } from 'date-fns';
 
@@ -27,8 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar día de la semana
-    const fechaTurno = new Date(`${fecha}T${hora}`);
-    const diaSemana = fechaTurno.getDay();
+    const diaSemana = getDayOfWeekInArgentina(fecha);
 
     if (!config.allowedDays.includes(diaSemana)) {
       return NextResponse.json(

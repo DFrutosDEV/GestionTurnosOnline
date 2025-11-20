@@ -74,7 +74,12 @@ export default function ReservaForm() {
 
   const isDateAllowed = (dateString: string) => {
     if (!config) return false;
-    const date = new Date(dateString);
+    // Parsear la fecha manualmente para evitar problemas de zona horaria
+    // El formato es YYYY-MM-DD
+    const [year, month, day] = dateString.split('-').map(Number);
+    // Crear fecha a mediodía en hora local para evitar problemas con cambios de día
+    // month - 1 porque los meses en JavaScript son 0-indexados
+    const date = new Date(year, month - 1, day, 12, 0, 0);
     const dayOfWeek = getDay(date);
     return config.allowedDays.includes(dayOfWeek);
   };

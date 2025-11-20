@@ -5,7 +5,7 @@ export interface SystemConfig {
   enabled: boolean;
   startHour: number;
   endHour: number;
-  allowedDays: number[]; // 1=Lunes, 2=Martes, ..., 6=Sábado
+  allowedDays: number[]; // 0=Domingo, 1=Lunes, 2=Martes, ..., 6=Sábado
   calendarEmail: string;
 }
 

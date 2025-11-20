@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getConfig } from '@/lib/config';
 import { encrypt } from '@/lib/encryption';
 import { sendEmail, generateSolicitudEmailHTML } from '@/lib/email';
+import { getDayOfWeekInArgentina } from '@/lib/googleCalendar';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,8 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar día de la semana
-    const fechaTurno = new Date(`${fecha}T${hora}`);
-    const diaSemana = fechaTurno.getDay();
+    const diaSemana = getDayOfWeekInArgentina(fecha);
 
     if (!config.allowedDays.includes(diaSemana)) {
       return NextResponse.json(

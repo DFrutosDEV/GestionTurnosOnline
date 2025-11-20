@@ -10,6 +10,17 @@ interface CalendarConfig {
 }
 
 /**
+ * Obtiene el día de la semana (0=Domingo, 1=Lunes, ..., 6=Sábado)
+ * desde un string de fecha en formato YYYY-MM-DD, considerando la zona horaria de Argentina
+ */
+export function getDayOfWeekInArgentina(fecha: string): number {
+  // Crear un Date a mediodía en Argentina para evitar problemas con cambios de día
+  const fechaMediodia = createDateInArgentinaTimezone(fecha, '12:00');
+  // Usar getUTCDay() porque el Date ya está ajustado para representar la hora correcta
+  return fechaMediodia.getUTCDay();
+}
+
+/**
  * Convierte una fecha y hora (strings) a un objeto Date interpretándolos
  * como si fueran en la zona horaria de Argentina (UTC-3)
  */
