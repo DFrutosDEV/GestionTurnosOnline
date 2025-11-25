@@ -61,9 +61,15 @@ export default function ReservaForm() {
     if (!config || !fecha) return;
 
     const horas: string[] = [];
-    for (let h = config.startHour; h < config.endHour; h++) {
-      horas.push(`${h.toString().padStart(2, '0')}:00`);
-      horas.push(`${h.toString().padStart(2, '0')}:30`);
+    // Convertir horas de inicio y fin a minutos totales desde medianoche
+    const inicioMinutos = config.startHour * 60;
+    const finMinutos = config.endHour * 60;
+
+    // Iterar sumando 30 minutos hasta llegar a la hora fin (incluida)
+    for (let minutos = inicioMinutos; minutos <= finMinutos; minutos += 30) {
+      const horasNum = Math.floor(minutos / 60);
+      const minutosNum = minutos % 60;
+      horas.push(`${horasNum.toString().padStart(2, '0')}:${minutosNum.toString().padStart(2, '0')}`);
     }
     setHorasDisponibles(horas);
   };
