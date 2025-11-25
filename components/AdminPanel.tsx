@@ -160,7 +160,7 @@ export default function AdminPanel() {
 
         <Divider />
 
-        <TextField
+        {/* <TextField
           label="Email para recibir eventos de Calendar"
           type="email"
           value={config.calendarEmail}
@@ -169,7 +169,7 @@ export default function AdminPanel() {
           }
           fullWidth
           helperText="Email donde se enviarán las invitaciones de los turnos reservados"
-        />
+        /> */}
 
         <Button
           variant="contained"

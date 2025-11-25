@@ -31,6 +31,7 @@ export default function ReservaForm() {
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingDisponibilidad, setLoadingDisponibilidad] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [horasDisponibles, setHorasDisponibles] = useState<string[]>([]);
@@ -98,6 +99,50 @@ export default function ReservaForm() {
         type: 'error',
         text: 'El día seleccionado no está disponible. Solo se aceptan reservas de martes a sábado.',
       });
+    }
+  };
+
+  const handleConsultarDisponibilidad = async () => {
+    if (!fecha || !hora) {
+      setMessage({
+        type: 'error',
+        text: 'Por favor, selecciona una fecha y hora primero',
+      });
+      return;
+    }
+
+    setMessage(null);
+    setLoadingDisponibilidad(true);
+
+    try {
+      const disponibilidadResponse = await fetch('/api/turnos/disponibilidad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha, hora }),
+      });
+
+      const disponibilidadData = await disponibilidadResponse.json();
+
+      if (disponibilidadResponse.ok) {
+        setMessage({
+          type: disponibilidadData.disponible ? 'success' : 'error',
+          text: disponibilidadData.disponible
+            ? `✅ DISPONIBLE - Fecha: ${fecha}, Hora: ${hora}`
+            : `❌ NO DISPONIBLE - Fecha: ${fecha}, Hora: ${hora}`,
+        });
+      } else {
+        setMessage({
+          type: 'error',
+          text: `Error: ${disponibilidadData.error || 'Error desconocido'}`,
+        });
+      }
+    } catch (error: any) {
+      setMessage({
+        type: 'error',
+        text: `Error de conexión: ${error.message || 'Error desconocido'}`,
+      });
+    } finally {
+      setLoadingDisponibilidad(false);
     }
   };
 
@@ -266,6 +311,17 @@ export default function ReservaForm() {
         >
           {loading ? <CircularProgress size={24} /> : 'Solicitar Turno'}
         </Button>
+
+        {/* <Button
+          type="button"
+          variant="outlined"
+          size="large"
+          onClick={handleConsultarDisponibilidad}
+          disabled={loadingDisponibilidad || !fecha || !hora}
+          sx={{ mt: 1 }}
+        >
+          {loadingDisponibilidad ? <CircularProgress size={24} /> : '🔍 Consultar Disponibilidad (DEBUG)'}
+        </Button> */}
       </Box>
     </Paper>
   );
