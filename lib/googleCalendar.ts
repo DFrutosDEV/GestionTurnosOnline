@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 const TIMEZONE = 'America/Argentina/Buenos_Aires';
@@ -10,89 +11,28 @@ interface CalendarConfig {
 }
 
 /**
+ * Convierte una fecha y hora (strings) a un objeto Date en UTC
+ * interpretándolos como hora de Argentina (UTC-3)
+ */
+export function createDateInArgentinaTimezone(fecha: string, hora: string): Date {
+  // Crear string de fecha/hora en formato ISO sin zona horaria
+  const dateTimeString = `${fecha}T${hora}:00`;
+  // Crear Date (será interpretado como hora local del servidor, pero lo trataremos como AR)
+  const localDate = new Date(dateTimeString);
+  // fromZonedTime interpreta el Date como si fuera en la zona horaria especificada
+  // y lo convierte a UTC
+  return fromZonedTime(localDate, TIMEZONE);
+}
+
+/**
  * Obtiene el día de la semana (0=Domingo, 1=Lunes, ..., 6=Sábado)
  * desde un string de fecha en formato YYYY-MM-DD, considerando la zona horaria de Argentina
  */
 export function getDayOfWeekInArgentina(fecha: string): number {
-  // Crear un Date a mediodía en Argentina para evitar problemas con cambios de día
-  const fechaMediodia = createDateInArgentinaTimezone(fecha, '12:00');
-  // Usar getUTCDay() porque el Date ya está ajustado para representar la hora correcta
-  return fechaMediodia.getUTCDay();
-}
-
-/**
- * Convierte una fecha y hora (strings) a un objeto Date interpretándolos
- * como si fueran en la zona horaria de Argentina (UTC-3)
- */
-export function createDateInArgentinaTimezone(fecha: string, hora: string): Date {
-  // Crear el string de fecha/hora en formato ISO sin zona horaria
-  const dateTimeString = `${fecha}T${hora}`;
-  
-  // Crear un Date interpretando la fecha/hora como si fuera en hora local del servidor
+  const dateTimeString = `${fecha}T12:00:00`;
   const localDate = new Date(dateTimeString);
-  
-  // Argentina está en UTC-3, que significa 180 minutos al oeste de UTC
-  // getTimezoneOffset() devuelve minutos positivos para zonas al oeste de UTC
-  const argentinaOffsetMinutes = 3 * 60; // 180 minutos (UTC-3)
-  
-  // Obtener el offset local del servidor en minutos
-  const localOffsetMinutes = localDate.getTimezoneOffset();
-  
-  // Calcular la diferencia: si el servidor está en UTC (offset=0) y queremos Argentina (offset=180),
-  // necesitamos sumar 180 minutos al Date para que represente la hora correcta en UTC
-  // que corresponde a la hora local de Argentina
-  const offsetDiffMinutes = argentinaOffsetMinutes - localOffsetMinutes;
-  const adjustedDate = new Date(localDate.getTime() + offsetDiffMinutes * 60 * 1000);
-  
-  return adjustedDate;
-}
-
-/**
- * Formatea un Date a formato ISO string para Google Calendar
- * El Date debe representar la hora correcta en UTC (ajustada para Argentina)
- * Convertimos de vuelta a hora local de Argentina para el formato
- */
-function formatDateTimeForGoogleCalendar(date: Date): string {
-  // El Date ya está ajustado: internamente representa la hora UTC
-  // que corresponde a la hora local de Argentina que queremos.
-  // Para formatear, necesitamos restar 3 horas de los valores UTC
-  // para obtener la hora local de Argentina.
-  const utcYear = date.getUTCFullYear();
-  const utcMonth = date.getUTCMonth();
-  const utcDay = date.getUTCDate();
-  const utcHours = date.getUTCHours();
-  const utcMinutes = date.getUTCMinutes();
-  const utcSeconds = date.getUTCSeconds();
-  
-  // Restar 3 horas para obtener hora local de Argentina
-  let argentinaHours = utcHours - 3;
-  let argentinaDay = utcDay;
-  let argentinaMonth = utcMonth;
-  let argentinaYear = utcYear;
-  
-  // Manejar casos donde restar horas cambia el día
-  if (argentinaHours < 0) {
-    argentinaHours += 24;
-    argentinaDay--;
-    if (argentinaDay < 1) {
-      argentinaMonth--;
-      if (argentinaMonth < 0) {
-        argentinaMonth = 11;
-        argentinaYear--;
-      }
-      // Obtener el último día del mes anterior
-      argentinaDay = new Date(argentinaYear, argentinaMonth + 1, 0).getDate();
-    }
-  }
-  
-  const year = String(argentinaYear);
-  const month = String(argentinaMonth + 1).padStart(2, '0');
-  const day = String(argentinaDay).padStart(2, '0');
-  const hours = String(argentinaHours).padStart(2, '0');
-  const minutes = String(utcMinutes).padStart(2, '0');
-  const seconds = String(utcSeconds).padStart(2, '0');
-  
-  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+  const dateInUTC = fromZonedTime(localDate, TIMEZONE);
+  return dateInUTC.getUTCDay();
 }
 
 /**
@@ -100,7 +40,7 @@ function formatDateTimeForGoogleCalendar(date: Date): string {
  */
 export function getCalendarClient(config: CalendarConfig) {
   if (!config.clientEmail || !config.privateKey || !config.calendarId) {
-    throw new Error('Las credenciales de Google Calendar no están configuradas correctamente. Verifica las variables de entorno GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY y GOOGLE_CALENDAR_ID.');
+    throw new Error('Las credenciales de Google Calendar no están configuradas correctamente.');
   }
 
   const auth = new google.auth.JWT({
@@ -132,13 +72,7 @@ export async function checkAvailability(
     });
 
     const calendarData = response.data.calendars?.[config.calendarId];
-
-    if (!calendarData || !calendarData.busy) {
-      return true;
-    }
-
-    // Si hay algún evento ocupando ese horario, no está disponible
-    return calendarData.busy.length === 0;
+    return !calendarData?.busy || calendarData.busy.length === 0;
   } catch (error) {
     console.error('Error verificando disponibilidad:', error);
     throw error;
@@ -158,19 +92,29 @@ export async function createCalendarEvent(
   try {
     const calendar = getCalendarClient(config);
 
-    // Formatear las fechas correctamente para Google Calendar
-    // Usamos formatDateTimeForGoogleCalendar para evitar problemas de zona horaria
-    const startISO = formatDateTimeForGoogleCalendar(startDateTime);
-    const endISO = formatDateTimeForGoogleCalendar(endDateTime);
+    // Convertir de UTC a hora de Argentina para el formato
+    const startArgentina = toZonedTime(startDateTime, TIMEZONE);
+    const endArgentina = toZonedTime(endDateTime, TIMEZONE);
+
+    // Formatear como ISO string sin zona horaria
+    const formatDateTime = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    };
 
     const event: any = {
       summary: title,
       start: {
-        dateTime: startISO,
+        dateTime: formatDateTime(startArgentina),
         timeZone: TIMEZONE,
       },
       end: {
-        dateTime: endISO,
+        dateTime: formatDateTime(endArgentina),
         timeZone: TIMEZONE,
       },
       reminders: {
@@ -181,20 +125,15 @@ export async function createCalendarEvent(
       },
     };
 
-    // Si hay emails, agregarlos en la descripción
-    // Nota: Los Service Accounts no pueden enviar invitaciones automáticamente
-    // Los emails se envían manualmente a través de nodemailer
     if (attendeeEmails) {
       const emails = Array.isArray(attendeeEmails) ? attendeeEmails : [attendeeEmails];
       event.description = `Emails de contacto:\n${emails.map(e => `- ${e}`).join('\n')}`;
-      // No agregamos attendees porque los Service Accounts no pueden enviar invitaciones
-      // Los emails de confirmación se envían manualmente
     }
 
     const response = await calendar.events.insert({
       calendarId: config.calendarId,
       requestBody: event,
-      sendUpdates: 'none', // Service Accounts no pueden enviar invitaciones automáticamente
+      sendUpdates: 'none',
     });
 
     return response.data.id || '';
@@ -203,4 +142,3 @@ export async function createCalendarEvent(
     throw error;
   }
 }
-

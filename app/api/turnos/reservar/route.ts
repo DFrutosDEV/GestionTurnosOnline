@@ -7,7 +7,6 @@ export async function POST(request: NextRequest) {
   try {
     const { nombre, apellido, fecha, hora } = await request.json();
 
-    // Validar campos requeridos
     if (!nombre || !apellido || !fecha || !hora) {
       return NextResponse.json(
         { error: 'Todos los campos son requeridos' },
@@ -15,10 +14,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Obtener configuración
     const config = getConfig();
 
-    // Verificar si el sistema está habilitado
     if (!config.enabled) {
       return NextResponse.json(
         { error: 'Las reservas están deshabilitadas temporalmente' },
@@ -26,9 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validar día de la semana
     const diaSemana = getDayOfWeekInArgentina(fecha);
-
     if (!config.allowedDays.includes(diaSemana)) {
       return NextResponse.json(
         { error: 'El día seleccionado no está disponible para reservas' },
@@ -36,27 +31,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validar hora
     const horaTurno = parseInt(hora.split(':')[0]);
-    if (horaTurno < config.startHour || horaTurno >= config.endHour) {
+    if (horaTurno < config.startHour || horaTurno > config.endHour) {
       return NextResponse.json(
-        { error: 'El horario seleccionado está fuera del rango permitido' },
+        { error: 'El horario seleccionado no está disponible para reservas' },
         { status: 400 }
       );
     }
 
-    // Verificar disponibilidad en Google Calendar
-    // Crear fechas interpretándolas como hora de Argentina
-    const startDateTime = createDateInArgentinaTimezone(fecha, hora);
-    const endDateTime = addMinutes(startDateTime, 30); // Turno de 30 minutos
-
-    // Validar que las variables de entorno estén configuradas
     if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_CALENDAR_ID) {
       return NextResponse.json(
-        { error: 'Configuración de Google Calendar no encontrada. Por favor, configura las variables de entorno GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY y GOOGLE_CALENDAR_ID.' },
+        { error: 'Configuración de Google Calendar no encontrada' },
         { status: 500 }
       );
     }
+
+    const startDateTime = createDateInArgentinaTimezone(fecha, hora);
+    const endDateTime = addMinutes(startDateTime, 30);
 
     const googleConfig = {
       clientEmail: process.env.GOOGLE_CLIENT_EMAIL,
@@ -64,12 +55,7 @@ export async function POST(request: NextRequest) {
       calendarId: process.env.GOOGLE_CALENDAR_ID,
     };
 
-    const disponible = await checkAvailability(
-      googleConfig,
-      startDateTime,
-      endDateTime
-    );
-
+    const disponible = await checkAvailability(googleConfig, startDateTime, endDateTime);
     if (!disponible) {
       return NextResponse.json(
         { error: 'El horario seleccionado no está disponible' },
@@ -77,7 +63,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Crear evento en Google Calendar
     const tituloEvento = `Turno - ${nombre} ${apellido}`;
     const eventId = await createCalendarEvent(
       googleConfig,

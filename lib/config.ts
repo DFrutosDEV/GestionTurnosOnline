@@ -22,6 +22,20 @@ export const DEFAULT_CONFIG: SystemConfig = {
 let currentConfig: SystemConfig = { ...DEFAULT_CONFIG };
 
 export function getConfig(): SystemConfig {
+  // Intentar leer de localStorage solo si estamos en el cliente (navegador)
+  // En el servidor, usar currentConfig que se actualiza con updateConfig()
+  if (typeof window !== 'undefined') {
+    const startHour = localStorage.getItem('startHour');
+    const endHour = localStorage.getItem('endHour');
+    if (startHour && endHour) {
+      const config = { ...currentConfig };
+      config.startHour = parseInt(startHour);
+      config.endHour = parseInt(endHour);
+      return config;
+    }
+  }
+  // Si no hay valores en localStorage o estamos en el servidor, usar currentConfig
+  // Si currentConfig no ha sido actualizado, usará los valores de DEFAULT_CONFIG
   return { ...currentConfig };
 }
 

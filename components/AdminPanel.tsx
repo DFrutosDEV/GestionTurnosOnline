@@ -36,6 +36,15 @@ export default function AdminPanel() {
     try {
       const response = await fetch('/api/config');
       const data = await response.json();
+
+      // Si hay valores en localStorage, usarlos para startHour y endHour
+      const startHour = localStorage.getItem('startHour');
+      const endHour = localStorage.getItem('endHour');
+      if (startHour && endHour) {
+        data.startHour = parseInt(startHour);
+        data.endHour = parseInt(endHour);
+      }
+
       setConfig(data);
     } catch (error) {
       setMessage({
@@ -61,6 +70,10 @@ export default function AdminPanel() {
       });
 
       if (response.ok) {
+        // Guardar startHour y endHour en localStorage
+        localStorage.setItem('startHour', config.startHour.toString());
+        localStorage.setItem('endHour', config.endHour.toString());
+
         setMessage({
           type: 'success',
           text: 'Configuración guardada exitosamente',

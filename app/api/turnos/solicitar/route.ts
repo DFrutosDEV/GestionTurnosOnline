@@ -46,11 +46,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validar hora
+    // Validar hora (debe estar dentro del rango permitido)
     const horaTurno = parseInt(hora.split(':')[0]);
-    if (horaTurno < config.startHour || horaTurno >= config.endHour) {
+    if (horaTurno < config.startHour || horaTurno > config.endHour) {
       return NextResponse.json(
-        { error: 'El horario seleccionado está fuera del rango permitido' },
+        { error: 'El horario seleccionado no está disponible para reservas' },
         { status: 400 }
       );
     }
