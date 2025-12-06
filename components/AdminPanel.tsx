@@ -12,6 +12,8 @@ import {
   Alert,
   CircularProgress,
   Divider,
+  FormGroup,
+  Checkbox,
 } from '@mui/material';
 
 interface SystemConfig {
@@ -37,12 +39,22 @@ export default function AdminPanel() {
       const response = await fetch('/api/config');
       const data = await response.json();
 
-      // Si hay valores en localStorage, usarlos para startHour y endHour
+      // Si hay valores en localStorage, usarlos para startHour, endHour y allowedDays
       const startHour = localStorage.getItem('startHour');
       const endHour = localStorage.getItem('endHour');
+      const allowedDaysStr = localStorage.getItem('allowedDays');
+
       if (startHour && endHour) {
         data.startHour = parseInt(startHour);
         data.endHour = parseInt(endHour);
+      }
+
+      if (allowedDaysStr) {
+        try {
+          data.allowedDays = JSON.parse(allowedDaysStr);
+        } catch (e) {
+          console.error('Error parsing allowedDays from localStorage:', e);
+        }
       }
 
       setConfig(data);
@@ -70,9 +82,10 @@ export default function AdminPanel() {
       });
 
       if (response.ok) {
-        // Guardar startHour y endHour en localStorage
+        // Guardar startHour, endHour y allowedDays en localStorage
         localStorage.setItem('startHour', config.startHour.toString());
         localStorage.setItem('endHour', config.endHour.toString());
+        localStorage.setItem('allowedDays', JSON.stringify(config.allowedDays));
 
         setMessage({
           type: 'success',
@@ -170,6 +183,48 @@ export default function AdminPanel() {
           inputProps={{ min: 0, max: 23 }}
           helperText="Hora en formato 24hs (0-23)"
         />
+
+        <Divider />
+
+        <Box>
+          <Typography variant="subtitle1" gutterBottom>
+            Días disponibles para reservas
+          </Typography>
+          <FormGroup>
+            {[
+              { value: 0, label: 'Domingo' },
+              { value: 1, label: 'Lunes' },
+              { value: 2, label: 'Martes' },
+              { value: 3, label: 'Miércoles' },
+              { value: 4, label: 'Jueves' },
+              { value: 5, label: 'Viernes' },
+              { value: 6, label: 'Sábado' },
+            ].map((day) => (
+              <FormControlLabel
+                key={day.value}
+                control={
+                  <Checkbox
+                    checked={config.allowedDays.includes(day.value)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setConfig({
+                          ...config,
+                          allowedDays: [...config.allowedDays, day.value],
+                        });
+                      } else {
+                        setConfig({
+                          ...config,
+                          allowedDays: config.allowedDays.filter((d) => d !== day.value),
+                        });
+                      }
+                    }}
+                  />
+                }
+                label={day.label}
+              />
+            ))}
+          </FormGroup>
+        </Box>
 
         <Divider />
 

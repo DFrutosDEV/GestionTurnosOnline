@@ -27,12 +27,24 @@ export function getConfig(): SystemConfig {
   if (typeof window !== 'undefined') {
     const startHour = localStorage.getItem('startHour');
     const endHour = localStorage.getItem('endHour');
+    const allowedDaysStr = localStorage.getItem('allowedDays');
+
+    const config = { ...currentConfig };
+
     if (startHour && endHour) {
-      const config = { ...currentConfig };
       config.startHour = parseInt(startHour);
       config.endHour = parseInt(endHour);
-      return config;
     }
+
+    if (allowedDaysStr) {
+      try {
+        config.allowedDays = JSON.parse(allowedDaysStr);
+      } catch (e) {
+        console.error('Error parsing allowedDays from localStorage:', e);
+      }
+    }
+
+    return config;
   }
   // Si no hay valores en localStorage o estamos en el servidor, usar currentConfig
   // Si currentConfig no ha sido actualizado, usará los valores de DEFAULT_CONFIG

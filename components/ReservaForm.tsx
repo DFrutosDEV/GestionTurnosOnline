@@ -52,6 +52,25 @@ export default function ReservaForm() {
     try {
       const response = await fetch('/api/config');
       const data = await response.json();
+
+      // Si hay valores en localStorage, usarlos para startHour, endHour y allowedDays
+      const startHour = localStorage.getItem('startHour');
+      const endHour = localStorage.getItem('endHour');
+      const allowedDaysStr = localStorage.getItem('allowedDays');
+
+      if (startHour && endHour) {
+        data.startHour = parseInt(startHour);
+        data.endHour = parseInt(endHour);
+      }
+
+      if (allowedDaysStr) {
+        try {
+          data.allowedDays = JSON.parse(allowedDaysStr);
+        } catch (e) {
+          console.error('Error parsing allowedDays from localStorage:', e);
+        }
+      }
+
       setConfig(data);
     } catch (error) {
       console.error('Error cargando configuración:', error);
@@ -95,9 +114,11 @@ export default function ReservaForm() {
     if (isDateAllowed(newFecha)) {
       setFecha(newFecha);
     } else {
+      const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const diasDisponibles = config?.allowedDays.map(d => diasNombres[d]).join(', ') || 'Ninguno configurado';
       setMessage({
         type: 'error',
-        text: 'El día seleccionado no está disponible. Solo se aceptan reservas de martes a sábado.',
+        text: `El día seleccionado no está disponible. Días disponibles: ${diasDisponibles || 'Ninguno configurado'}.`,
       });
     }
   };

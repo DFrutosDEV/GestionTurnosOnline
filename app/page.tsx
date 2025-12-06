@@ -8,6 +8,7 @@ import LoginDialog from '@/components/LoginDialog';
 import AdminPanel from '@/components/AdminPanel';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { APP_VERSION } from '@/lib/version';
 
 const theme = createTheme({
   palette: {
@@ -42,7 +43,7 @@ export default function Home() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ flexGrow: 1, minHeight: '100vh', bgcolor: 'background.default' }}>
+      <Box sx={{ flexGrow: 1, minHeight: '100vh', bgcolor: 'background.default', display: 'flex', flexDirection: 'column' }}>
         <AppBar position="static" elevation={0}>
           <Toolbar>
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
@@ -79,6 +80,23 @@ export default function Home() {
           onClose={() => setLoginDialogOpen(false)}
           onLoginSuccess={handleLoginSuccess}
         />
+
+        <Box
+          component="footer"
+          sx={{
+            mt: 'auto',
+            py: 2,
+            px: 2,
+            bgcolor: 'background.paper',
+            borderTop: 1,
+            borderColor: 'divider',
+            textAlign: 'center',
+          }}
+        >
+          <Typography align="right" variant="body2" color="text.secondary">
+            Versión {APP_VERSION}
+          </Typography>
+        </Box>
       </Box>
     </ThemeProvider>
   );
