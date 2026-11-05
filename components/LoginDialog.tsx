@@ -43,7 +43,6 @@ export default function LoginDialog({
       const data = await response.json();
 
       if (response.ok) {
-        // Guardar estado de autenticación (en producción usar tokens seguros)
         sessionStorage.setItem('isAuthenticated', 'true');
         onLoginSuccess();
         onClose();
@@ -60,9 +59,37 @@ export default function LoginDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 1.5,
+          bgcolor: '#f3f1ee',
+        },
+      }}
+    >
       <form onSubmit={handleSubmit}>
-        <DialogTitle>Iniciar Sesión</DialogTitle>
+        <DialogTitle
+          sx={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            pb: 1,
+          }}
+        >
+          Iniciar sesión
+          <Box
+            sx={{
+              width: 40,
+              height: 3,
+              bgcolor: '#c45c3a',
+              mt: 1,
+            }}
+          />
+        </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}
@@ -85,16 +112,15 @@ export default function LoginDialog({
             />
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} disabled={loading}>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button onClick={onClose} disabled={loading} variant="outlined">
             Cancelar
           </Button>
           <Button type="submit" variant="contained" disabled={loading}>
-            Iniciar Sesión
+            Iniciar sesión
           </Button>
         </DialogActions>
       </form>
     </Dialog>
   );
 }
-

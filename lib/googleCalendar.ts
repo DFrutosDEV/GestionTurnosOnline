@@ -79,6 +79,88 @@ export async function checkAvailability(
   }
 }
 
+export interface BusyPeriod {
+  start: Date;
+  end: Date;
+}
+
+/**
+ * Obtiene los intervalos ocupados de un día completo (Argentina)
+ */
+export async function getBusyPeriodsForDay(
+  config: CalendarConfig,
+  fecha: string
+): Promise<BusyPeriod[]> {
+  const dayStart = createDateInArgentinaTimezone(fecha, '00:00');
+  const dayEnd = createDateInArgentinaTimezone(fecha, '23:59');
+  // Incluir el último minuto completo
+  dayEnd.setUTCSeconds(59, 999);
+
+  const calendar = getCalendarClient(config);
+
+  const response = await calendar.freebusy.query({
+    requestBody: {
+      timeMin: dayStart.toISOString(),
+      timeMax: dayEnd.toISOString(),
+      items: [{ id: config.calendarId }],
+    },
+  });
+
+  const busy = response.data.calendars?.[config.calendarId]?.busy || [];
+
+  return busy
+    .filter((slot): slot is { start: string; end: string } => Boolean(slot.start && slot.end))
+    .map((slot) => ({
+      start: new Date(slot.start),
+      end: new Date(slot.end),
+    }));
+}
+
+function rangesOverlap(
+  startA: Date,
+  endA: Date,
+  startB: Date,
+  endB: Date
+): boolean {
+  return startA < endB && startB < endA;
+}
+
+/**
+ * Genera slots de 30 minutos y filtra los que se solapan con busy
+ */
+export function filterAvailableSlots(
+  fecha: string,
+  startHour: number,
+  endHour: number,
+  busyPeriods: BusyPeriod[],
+  slotMinutes = 30
+): { disponibles: string[]; ocupados: string[] } {
+  const disponibles: string[] = [];
+  const ocupados: string[] = [];
+  const inicioMinutos = startHour * 60;
+  const finMinutos = endHour * 60;
+
+  for (let minutos = inicioMinutos; minutos <= finMinutos; minutos += slotMinutes) {
+    const horasNum = Math.floor(minutos / 60);
+    const minutosNum = minutos % 60;
+    const hora = `${horasNum.toString().padStart(2, '0')}:${minutosNum.toString().padStart(2, '0')}`;
+    const slotStart = createDateInArgentinaTimezone(fecha, hora);
+    const slotEnd = new Date(slotStart.getTime() + slotMinutes * 60 * 1000);
+
+    const isBusy = busyPeriods.some((busy) =>
+      rangesOverlap(slotStart, slotEnd, busy.start, busy.end)
+    );
+
+    if (isBusy) {
+      ocupados.push(hora);
+    } else {
+      disponibles.push(hora);
+    }
+  }
+
+  return { disponibles, ocupados };
+}
+
 /**
  * Crea un evento en Google Calendar
  */

@@ -1,12 +1,22 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Space_Grotesk, Figtree } from 'next/font/google'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-space-grotesk',
+  display: 'swap',
+})
+
+const figtree = Figtree({
+  subsets: ['latin'],
+  variable: '--font-figtree',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
-  title: 'Sistema de Gestión de Turnos',
-  description: 'Sistema para gestionar turnos con integración a Google Calendar',
+  title: 'MiTurnoVirtual · Reservar turno',
+  description: 'Reservá tu turno online de forma rápida y simple.',
 }
 
 export default function RootLayout({
@@ -16,8 +26,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body className={inter.className}>{children}</body>
+      <body className={`${spaceGrotesk.variable} ${figtree.variable}`}>{children}</body>
     </html>
   )
 }
-

@@ -10,27 +10,26 @@ body {
   overflow-x: hidden;
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
-}
-
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  --ink: #0b1c2c;
+  --stone: #f3f1ee;
+  --stone-muted: #8a8680;
+  --accent: #c45c3a;
+  --line: #d8d4ce;
+  --surface: #ffffff;
+  --black: #111111;
+  --font-display: var(--font-space-grotesk), 'Space Grotesk', sans-serif;
+  --font-body: var(--font-figtree), 'Figtree', sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+body {
+  color: var(--ink);
+  background: var(--stone);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
 }
 
+::selection {
+  background: rgba(196, 92, 58, 0.25);
+  color: var(--ink);
+}

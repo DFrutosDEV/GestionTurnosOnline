@@ -6,57 +6,124 @@ import {
   TextField,
   Button,
   Typography,
-  Paper,
   Alert,
   CircularProgress,
   MenuItem,
   Select,
   FormControl,
   InputLabel,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
 } from '@mui/material';
-import { getDay, format } from 'date-fns';
-
-interface SystemConfig {
-  enabled: boolean;
-  startHour: number;
-  endHour: number;
-  allowedDays: number[];
-  calendarEmail: string;
-}
+import CloseIcon from '@mui/icons-material/Close';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import { getDay, format, parse } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFnsV3';
+import { DateCalendar } from '@mui/x-date-pickers/DateCalendar';
+import {
+  DEFAULT_RESERVA_SUCCESS_MESSAGE,
+  getBookingDateBounds,
+  isDateWithinBookingWindow,
+  type SystemConfig,
+} from '@/lib/config';
+import { getPhoneValidationError, normalizePhone, PHONE_MAX_LENGTH } from '@/lib/phone';
+import Toast, { type ToastState } from '@/components/Toast';
 
 export default function ReservaForm() {
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [telefonoError, setTelefonoError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingDisponibilidad, setLoadingDisponibilidad] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [loadingHoras, setLoadingHoras] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [horasDisponibles, setHorasDisponibles] = useState<string[]>([]);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
-  // Cargar configuración al montar el componente
   useEffect(() => {
     fetchConfig();
   }, []);
 
-  // Actualizar horas disponibles cuando cambia la fecha o la configuración
   useEffect(() => {
-    if (fecha && config) {
-      generateAvailableHours();
+    if (!fecha) {
+      setHorasDisponibles([]);
+      return;
     }
-  }, [fecha, config]);
+
+    let cancelled = false;
+
+    const loadHorasDisponibles = async () => {
+      setLoadingHoras(true);
+      setHora('');
+      setHorasDisponibles([]);
+
+      try {
+        const response = await fetch('/api/turnos/disponibilidad', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fecha }),
+        });
+        const data = await response.json();
+
+        if (cancelled) return;
+
+        if (!response.ok) {
+          setToast({
+            type: 'error',
+            text: data.error || 'No se pudieron cargar los horarios disponibles',
+          });
+          setHorasDisponibles([]);
+          return;
+        }
+
+        setHorasDisponibles(data.horasDisponibles || []);
+        if ((data.horasDisponibles || []).length === 0) {
+          setToast({
+            type: 'error',
+            text: 'No hay horarios disponibles para esa fecha. Probá con otro día.',
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setToast({
+            type: 'error',
+            text: 'Error al consultar disponibilidad del calendario',
+          });
+          setHorasDisponibles([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingHoras(false);
+        }
+      }
+    };
+
+    loadHorasDisponibles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fecha]);
 
   const fetchConfig = async () => {
     try {
       const response = await fetch('/api/config');
       const data = await response.json();
 
-      // Si hay valores en localStorage, usarlos para startHour, endHour y allowedDays
       const startHour = localStorage.getItem('startHour');
       const endHour = localStorage.getItem('endHour');
       const allowedDaysStr = localStorage.getItem('allowedDays');
+      const minAdvanceDays = localStorage.getItem('minAdvanceDays');
+      const maxAdvanceDays = localStorage.getItem('maxAdvanceDays');
+      const reservaSuccessMessage = localStorage.getItem('reservaSuccessMessage');
 
       if (startHour && endHour) {
         data.startHour = parseInt(startHour);
@@ -71,109 +138,75 @@ export default function ReservaForm() {
         }
       }
 
-      setConfig(data);
+      if (minAdvanceDays !== null) {
+        data.minAdvanceDays = parseInt(minAdvanceDays);
+      }
+
+      if (maxAdvanceDays !== null) {
+        data.maxAdvanceDays = parseInt(maxAdvanceDays);
+      }
+
+      if (reservaSuccessMessage !== null && reservaSuccessMessage.trim() !== '') {
+        data.reservaSuccessMessage = reservaSuccessMessage;
+      }
+
+      setConfig({
+        ...data,
+        reservaSuccessMessage:
+          data.reservaSuccessMessage?.trim() || DEFAULT_RESERVA_SUCCESS_MESSAGE,
+      });
     } catch (error) {
       console.error('Error cargando configuración:', error);
     }
   };
 
-  const generateAvailableHours = () => {
-    if (!config || !fecha) return;
-
-    const horas: string[] = [];
-    // Convertir horas de inicio y fin a minutos totales desde medianoche
-    const inicioMinutos = config.startHour * 60;
-    const finMinutos = config.endHour * 60;
-
-    // Iterar sumando 30 minutos hasta llegar a la hora fin (incluida)
-    for (let minutos = inicioMinutos; minutos <= finMinutos; minutos += 30) {
-      const horasNum = Math.floor(minutos / 60);
-      const minutosNum = minutos % 60;
-      horas.push(`${horasNum.toString().padStart(2, '0')}:${minutosNum.toString().padStart(2, '0')}`);
-    }
-    setHorasDisponibles(horas);
-  };
-
-  const getMinDate = () => {
-    return format(new Date(), 'yyyy-MM-dd');
-  };
-
-  const isDateAllowed = (dateString: string) => {
+  const isCalendarDateAllowed = (date: Date) => {
     if (!config) return false;
-    // Parsear la fecha manualmente para evitar problemas de zona horaria
-    // El formato es YYYY-MM-DD
-    const [year, month, day] = dateString.split('-').map(Number);
-    // Crear fecha a mediodía en hora local para evitar problemas con cambios de día
-    // month - 1 porque los meses en JavaScript son 0-indexados
-    const date = new Date(year, month - 1, day, 12, 0, 0);
-    const dayOfWeek = getDay(date);
-    return config.allowedDays.includes(dayOfWeek);
+    if (!config.allowedDays.includes(getDay(date))) return false;
+    return isDateWithinBookingWindow(date, config);
   };
 
-  const handleFechaChange = (newFecha: string) => {
-    if (isDateAllowed(newFecha)) {
-      setFecha(newFecha);
-    } else {
+  const handleSelectDate = (date: Date | null) => {
+    if (!date || !config) return;
+
+    if (!isCalendarDateAllowed(date)) {
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      const diasDisponibles = config?.allowedDays.map(d => diasNombres[d]).join(', ') || 'Ninguno configurado';
-      setMessage({
+      const diasDisponibles = config.allowedDays.map((d) => diasNombres[d]).join(', ') || 'Ninguno configurado';
+      setToast({
         type: 'error',
-        text: `El día seleccionado no está disponible. Días disponibles: ${diasDisponibles || 'Ninguno configurado'}.`,
-      });
-    }
-  };
-
-  const handleConsultarDisponibilidad = async () => {
-    if (!fecha || !hora) {
-      setMessage({
-        type: 'error',
-        text: 'Por favor, selecciona una fecha y hora primero',
+        text: `El día seleccionado no está disponible. Días disponibles: ${diasDisponibles}.`,
       });
       return;
     }
 
-    setMessage(null);
-    setLoadingDisponibilidad(true);
+    setFecha(format(date, 'yyyy-MM-dd'));
+    setHora('');
+    setToast(null);
+    setCalendarOpen(false);
+  };
 
-    try {
-      const disponibilidadResponse = await fetch('/api/turnos/disponibilidad', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha, hora }),
-      });
+  const selectedDateLabel = fecha
+    ? format(parse(fecha, 'yyyy-MM-dd', new Date()), "EEEE d 'de' MMMM", { locale: es })
+    : null;
 
-      const disponibilidadData = await disponibilidadResponse.json();
-
-      if (disponibilidadResponse.ok) {
-        setMessage({
-          type: disponibilidadData.disponible ? 'success' : 'error',
-          text: disponibilidadData.disponible
-            ? `✅ DISPONIBLE - Fecha: ${fecha}, Hora: ${hora}`
-            : `❌ NO DISPONIBLE - Fecha: ${fecha}, Hora: ${hora}`,
-        });
-      } else {
-        setMessage({
-          type: 'error',
-          text: `Error: ${disponibilidadData.error || 'Error desconocido'}`,
-        });
-      }
-    } catch (error: any) {
-      setMessage({
-        type: 'error',
-        text: `Error de conexión: ${error.message || 'Error desconocido'}`,
-      });
-    } finally {
-      setLoadingDisponibilidad(false);
-    }
+  const validateTelefono = (value: string) => {
+    const error = getPhoneValidationError(value);
+    setTelefonoError(error);
+    return error === null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMessage(null);
+    setToast(null);
+
+    if (!validateTelefono(telefono)) {
+      return;
+    }
+
     setLoading(true);
+    const telefonoNormalizado = normalizePhone(telefono);
 
     try {
-      // Primero verificar disponibilidad
       const disponibilidadResponse = await fetch('/api/turnos/disponibilidad', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -183,7 +216,7 @@ export default function ReservaForm() {
       const disponibilidadData = await disponibilidadResponse.json();
 
       if (!disponibilidadData.disponible) {
-        setMessage({
+        setToast({
           type: 'error',
           text: 'El horario seleccionado ya está ocupado. Por favor, elija otro.',
         });
@@ -191,34 +224,42 @@ export default function ReservaForm() {
         return;
       }
 
-      // Si está disponible, enviar solicitud de turno al admin
       const response = await fetch('/api/turnos/solicitar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, apellido, email, fecha, hora }),
+        body: JSON.stringify({
+          nombre,
+          apellido,
+          telefono: telefonoNormalizado,
+          email,
+          fecha,
+          hora,
+        }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setMessage({
+        setToast({
           type: 'success',
-          text: '¡Solicitud de turno enviada exitosamente! El administrador recibirá un email y confirmará tu turno. Recibirás un email de confirmación una vez que sea aprobado.',
+          text:
+            config?.reservaSuccessMessage?.trim() ||
+            DEFAULT_RESERVA_SUCCESS_MESSAGE,
         });
-        // Limpiar formulario
         setNombre('');
         setApellido('');
+        setTelefono('');
         setEmail('');
         setFecha('');
         setHora('');
       } else {
-        setMessage({
+        setToast({
           type: 'error',
           text: data.error || 'Error al enviar la solicitud de turno',
         });
       }
     } catch (error) {
-      setMessage({
+      setToast({
         type: 'error',
         text: 'Error de conexión. Intente nuevamente.',
       });
@@ -229,122 +270,284 @@ export default function ReservaForm() {
 
   if (!config) {
     return (
-      <Box display="flex" justifyContent="center" p={4}>
-        <CircularProgress />
+      <Box display="flex" justifyContent="center" width="100%" py={6}>
+        <CircularProgress sx={{ color: '#c45c3a' }} />
       </Box>
     );
   }
 
   if (!config.enabled) {
     return (
-      <Paper sx={{ p: 4, textAlign: 'center' }}>
-        <Alert severity="warning">
+      <Box width="100%">
+        <Typography
+          component="h1"
+          sx={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 700,
+            fontSize: { xs: '2.15rem', md: '2.6rem' },
+            letterSpacing: '-0.03em',
+            color: '#0b1c2c',
+            mb: 1.25,
+          }}
+        >
+          Reservar turno
+        </Typography>
+        <Box
+          sx={{
+            width: 64,
+            height: 3.5,
+            bgcolor: '#c45c3a',
+            mb: 3.5,
+          }}
+        />
+        <Alert severity="warning" sx={{ fontSize: '1rem' }}>
           Las reservas están temporalmente deshabilitadas.
         </Alert>
-      </Paper>
+      </Box>
     );
   }
 
+  const { minDate, maxDate } = getBookingDateBounds(config);
+  const selectedDateValue = fecha ? parse(fecha, 'yyyy-MM-dd', new Date()) : null;
+
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        p: 4,
-        maxWidth: 600,
-        mx: 'auto',
-        mt: 4,
-      }}
-    >
-      <Typography variant="h4" component="h1" gutterBottom align="center">
-        Reservar Turno
-      </Typography>
-
-      {message && (
-        <Alert severity={message.type} sx={{ mb: 3 }}>
-          {message.text}
-        </Alert>
-      )}
-
-      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <TextField
-          label="Nombre"
-          value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
-          required
-          fullWidth
-          disabled={loading}
+    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
+      <Box width="100%">
+        <Typography
+          component="h1"
+          sx={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 700,
+            fontSize: { xs: '2.15rem', md: '2.6rem' },
+            letterSpacing: '-0.03em',
+            color: '#0b1c2c',
+            mb: 1.25,
+          }}
+        >
+          Reservar turno
+        </Typography>
+        <Box
+          sx={{
+            width: 64,
+            height: 3.5,
+            bgcolor: '#c45c3a',
+            mb: 4,
+          }}
         />
 
-        <TextField
-          label="Apellido"
-          value={apellido}
-          onChange={(e) => setApellido(e.target.value)}
-          required
-          fullWidth
-          disabled={loading}
-        />
+        <Box
+          component="form"
+          onSubmit={handleSubmit}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}
+        >
+          <TextField
+            label="Nombre"
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            required
+            fullWidth
+            disabled={loading}
+          />
 
-        <TextField
-          label="Email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          fullWidth
-          disabled={loading}
-          helperText="Email donde recibirás la confirmación del turno"
-        />
+          <TextField
+            label="Apellido"
+            value={apellido}
+            onChange={(e) => setApellido(e.target.value)}
+            required
+            fullWidth
+            disabled={loading}
+          />
 
-        <TextField
-          label="Fecha"
-          type="date"
-          value={fecha}
-          onChange={(e) => handleFechaChange(e.target.value)}
-          required
-          fullWidth
-          inputProps={{ min: getMinDate() }}
-          disabled={loading}
-          InputLabelProps={{ shrink: true }}
-        />
+          <TextField
+            label="Teléfono"
+            type="tel"
+            value={telefono}
+            onChange={(e) => {
+              const value = e.target.value.slice(0, PHONE_MAX_LENGTH);
+              setTelefono(value);
+              if (telefonoError) {
+                setTelefonoError(getPhoneValidationError(value));
+              }
+            }}
+            onBlur={() => validateTelefono(telefono)}
+            required
+            fullWidth
+            disabled={loading}
+            error={Boolean(telefonoError)}
+            helperText={telefonoError || `Máx. ${PHONE_MAX_LENGTH} caracteres. Ej: 11 2345-6789`}
+            placeholder="Ej: 11 2345-6789"
+            inputProps={{
+              inputMode: 'tel',
+              autoComplete: 'tel',
+              maxLength: PHONE_MAX_LENGTH,
+            }}
+          />
 
-        <FormControl fullWidth required>
-          <InputLabel>Hora</InputLabel>
-          <Select
-            value={hora}
-            onChange={(e) => setHora(e.target.value)}
-            label="Hora"
-            disabled={loading || !fecha}
+          <TextField
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            fullWidth
+            disabled={loading}
+            helperText="Email donde recibirás la confirmación del turno"
+          />
+
+          <Box>
+            <Typography
+              variant="body2"
+              sx={{ mb: 1, fontWeight: 600, color: 'text.secondary' }}
+            >
+              Fecha
+            </Typography>
+            <Button
+              type="button"
+              variant="outlined"
+              fullWidth
+              disabled={loading}
+              onClick={() => setCalendarOpen(true)}
+              startIcon={<CalendarMonthIcon />}
+              sx={{
+                justifyContent: 'flex-start',
+                py: 1.7,
+                px: 2,
+                fontSize: '1.05rem',
+                fontWeight: 600,
+                textTransform: 'none',
+                borderColor: '#d8d4ce',
+                color: selectedDateLabel ? '#0b1c2c' : '#8a8680',
+                bgcolor: '#ffffff',
+                '&:hover': {
+                  borderColor: '#0b1c2c',
+                  bgcolor: '#ffffff',
+                },
+              }}
+            >
+              {selectedDateLabel
+                ? selectedDateLabel.charAt(0).toUpperCase() + selectedDateLabel.slice(1)
+                : 'Seleccionar la fecha'}
+            </Button>
+          </Box>
+
+          {fecha && (
+            <Box>
+              <FormControl fullWidth required>
+                <InputLabel>Hora</InputLabel>
+                <Select
+                  value={hora}
+                  onChange={(e) => setHora(e.target.value)}
+                  label="Hora"
+                  disabled={loading || loadingHoras || horasDisponibles.length === 0}
+                  displayEmpty
+                >
+                  {horasDisponibles.map((h) => (
+                    <MenuItem key={h} value={h}>
+                      {h}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {loadingHoras && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                  <CircularProgress size={16} sx={{ color: '#c45c3a' }} />
+                  <Typography variant="caption" color="text.secondary">
+                    Buscando espacios libres en el calendario...
+                  </Typography>
+                </Box>
+              )}
+              {!loadingHoras && horasDisponibles.length === 0 && (
+                <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                  Sin horarios disponibles para esta fecha
+                </Typography>
+              )}
+            </Box>
+          )}
+
+          <Button
+            type="submit"
+            variant="contained"
+            size="large"
+            disabled={
+              loading ||
+              !nombre ||
+              !apellido ||
+              !telefono ||
+              Boolean(telefonoError) ||
+              !email ||
+              !fecha ||
+              !hora
+            }
+            sx={{
+              mt: 1.5,
+              py: 1.85,
+              fontSize: '1.1rem',
+              fontWeight: 700,
+            }}
           >
-            {horasDisponibles.map((h) => (
-              <MenuItem key={h} value={h}>
-                {h}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+            {loading ? (
+              <CircularProgress size={22} sx={{ color: '#ffffff' }} />
+            ) : (
+              'Solicitar turno'
+            )}
+          </Button>
+        </Box>
 
-        <Button
-          type="submit"
-          variant="contained"
-          size="large"
-          disabled={loading || !nombre || !apellido || !email || !fecha || !hora}
-          sx={{ mt: 2 }}
+        <Dialog
+          open={calendarOpen}
+          onClose={() => setCalendarOpen(false)}
+          maxWidth="xs"
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              m: 2,
+              width: '100%',
+              maxWidth: 320,
+            },
+          }}
         >
-          {loading ? <CircularProgress size={24} /> : 'Solicitar Turno'}
-        </Button>
+          <DialogTitle
+            sx={{
+              fontFamily: 'var(--font-display)',
+              fontWeight: 700,
+              fontSize: '1.15rem',
+              pr: 6,
+              pb: 0.5,
+            }}
+          >
+            Elegí el día
+            <IconButton
+              aria-label="Cerrar"
+              onClick={() => setCalendarOpen(false)}
+              sx={{ position: 'absolute', right: 8, top: 8 }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ px: 1, pb: 1.5, pt: 0.5 }}>
+            <DateCalendar
+              value={selectedDateValue}
+              onChange={handleSelectDate}
+              minDate={minDate}
+              maxDate={maxDate}
+              shouldDisableDate={(date) => !isCalendarDateAllowed(date)}
+              sx={{
+                width: '100%',
+                maxHeight: 300,
+                '& .MuiPickersDay-root': {
+                  fontSize: '0.9rem',
+                },
+                '& .MuiPickersCalendarHeader-label': {
+                  fontSize: '0.95rem',
+                  fontWeight: 700,
+                },
+              }}
+            />
+          </DialogContent>
+        </Dialog>
 
-        {/* <Button
-          type="button"
-          variant="outlined"
-          size="large"
-          onClick={handleConsultarDisponibilidad}
-          disabled={loadingDisponibilidad || !fecha || !hora}
-          sx={{ mt: 1 }}
-        >
-          {loadingDisponibilidad ? <CircularProgress size={24} /> : '🔍 Consultar Disponibilidad (DEBUG)'}
-        </Button> */}
+        <Toast toast={toast} onClose={() => setToast(null)} />
       </Box>
-    </Paper>
+    </LocalizationProvider>
   );
 }
-

@@ -15,20 +15,14 @@ import {
   FormGroup,
   Checkbox,
 } from '@mui/material';
-
-interface SystemConfig {
-  enabled: boolean;
-  startHour: number;
-  endHour: number;
-  allowedDays: number[];
-  calendarEmail: string;
-}
+import { DEFAULT_RESERVA_SUCCESS_MESSAGE, type SystemConfig } from '@/lib/config';
+import Toast, { type ToastState } from '@/components/Toast';
 
 export default function AdminPanel() {
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
 
   useEffect(() => {
     fetchConfig();
@@ -39,10 +33,12 @@ export default function AdminPanel() {
       const response = await fetch('/api/config');
       const data = await response.json();
 
-      // Si hay valores en localStorage, usarlos para startHour, endHour y allowedDays
       const startHour = localStorage.getItem('startHour');
       const endHour = localStorage.getItem('endHour');
       const allowedDaysStr = localStorage.getItem('allowedDays');
+      const minAdvanceDays = localStorage.getItem('minAdvanceDays');
+      const maxAdvanceDays = localStorage.getItem('maxAdvanceDays');
+      const reservaSuccessMessage = localStorage.getItem('reservaSuccessMessage');
 
       if (startHour && endHour) {
         data.startHour = parseInt(startHour);
@@ -57,9 +53,27 @@ export default function AdminPanel() {
         }
       }
 
-      setConfig(data);
+      if (minAdvanceDays !== null) {
+        data.minAdvanceDays = parseInt(minAdvanceDays);
+      }
+
+      if (maxAdvanceDays !== null) {
+        data.maxAdvanceDays = parseInt(maxAdvanceDays);
+      }
+
+      if (reservaSuccessMessage !== null && reservaSuccessMessage.trim() !== '') {
+        data.reservaSuccessMessage = reservaSuccessMessage;
+      }
+
+      setConfig({
+        ...data,
+        minAdvanceDays: data.minAdvanceDays ?? 0,
+        maxAdvanceDays: data.maxAdvanceDays ?? 30,
+        reservaSuccessMessage:
+          data.reservaSuccessMessage?.trim() || DEFAULT_RESERVA_SUCCESS_MESSAGE,
+      });
     } catch (error) {
-      setMessage({
+      setToast({
         type: 'error',
         text: 'Error cargando configuración',
       });
@@ -72,7 +86,6 @@ export default function AdminPanel() {
     if (!config) return;
 
     setSaving(true);
-    setMessage(null);
 
     try {
       const response = await fetch('/api/config', {
@@ -82,23 +95,28 @@ export default function AdminPanel() {
       });
 
       if (response.ok) {
-        // Guardar startHour, endHour y allowedDays en localStorage
         localStorage.setItem('startHour', config.startHour.toString());
         localStorage.setItem('endHour', config.endHour.toString());
         localStorage.setItem('allowedDays', JSON.stringify(config.allowedDays));
+        localStorage.setItem('minAdvanceDays', config.minAdvanceDays.toString());
+        localStorage.setItem('maxAdvanceDays', config.maxAdvanceDays.toString());
+        localStorage.setItem(
+          'reservaSuccessMessage',
+          config.reservaSuccessMessage.trim() || DEFAULT_RESERVA_SUCCESS_MESSAGE
+        );
 
-        setMessage({
+        setToast({
           type: 'success',
           text: 'Configuración guardada exitosamente',
         });
       } else {
-        setMessage({
+        setToast({
           type: 'error',
           text: 'Error al guardar la configuración',
         });
       }
     } catch (error) {
-      setMessage({
+      setToast({
         type: 'error',
         text: 'Error de conexión',
       });
@@ -132,12 +150,6 @@ export default function AdminPanel() {
       <Typography variant="h4" component="h1" gutterBottom>
         Panel de Administración
       </Typography>
-
-      {message && (
-        <Alert severity={message.type} sx={{ mb: 3 }}>
-          {message.text}
-        </Alert>
-      )}
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <Divider />
@@ -228,16 +240,66 @@ export default function AdminPanel() {
 
         <Divider />
 
-        {/* <TextField
-          label="Email para recibir eventos de Calendar"
-          type="email"
-          value={config.calendarEmail}
+        <Typography variant="subtitle1">
+          Validaciones de fecha
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: -2 }}>
+          Controlan qué días aparecen habilitados en el calendario de reservas.
+        </Typography>
+
+        <TextField
+          label="Anticipación mínima (días)"
+          type="number"
+          value={config.minAdvanceDays}
           onChange={(e) =>
-            setConfig({ ...config, calendarEmail: e.target.value })
+            setConfig({
+              ...config,
+              minAdvanceDays: Math.max(0, parseInt(e.target.value) || 0),
+            })
+          }
+          inputProps={{ min: 0, max: 365 }}
+          helperText="0 = se puede reservar el mismo día. 1 = recién desde mañana, etc."
+        />
+
+        <TextField
+          label="Anticipación máxima (días)"
+          type="number"
+          value={config.maxAdvanceDays}
+          onChange={(e) =>
+            setConfig({
+              ...config,
+              maxAdvanceDays: Math.max(1, parseInt(e.target.value) || 1),
+            })
+          }
+          inputProps={{ min: 1, max: 365 }}
+          helperText="Hasta cuántos días hacia adelante se puede elegir una fecha."
+        />
+
+        <Divider />
+
+        <Typography variant="subtitle1">
+          Mensaje de confirmación
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: -2 }}>
+          Texto del toast cuando un cliente solicita un turno con éxito.
+        </Typography>
+
+        <TextField
+          label="Mensaje del toast de confirmación"
+          value={config.reservaSuccessMessage}
+          onChange={(e) =>
+            setConfig({
+              ...config,
+              reservaSuccessMessage: e.target.value,
+            })
           }
           fullWidth
-          helperText="Email donde se enviarán las invitaciones de los turnos reservados"
-        /> */}
+          multiline
+          minRows={3}
+          helperText="Si lo dejás vacío al guardar, se restaura el mensaje por defecto."
+        />
+
+        <Divider />
 
         <Button
           variant="contained"
@@ -249,7 +311,8 @@ export default function AdminPanel() {
           {saving ? <CircularProgress size={24} /> : 'Guardar Configuración'}
         </Button>
       </Box>
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </Paper>
   );
 }
-
