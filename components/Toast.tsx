@@ -40,7 +40,7 @@ const softColors = {
 export default function Toast({
   toast,
   onClose,
-  autoHideDuration = 2000,
+  autoHideDuration = 5000,
 }: ToastProps) {
   // Conservamos el último toast visible para que no pierda estilos durante el fade-out
   const [displayToast, setDisplayToast] = useState<ToastState>(toast);
